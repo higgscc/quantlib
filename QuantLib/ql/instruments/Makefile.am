@@ -46,6 +46,7 @@ this_include_HEADERS = \
     quantobarrieroption.hpp \
     quantoforwardvanillaoption.hpp \
     quantovanillaoption.hpp \
+    singleleg.hpp \
     stickyratchet.hpp \
     stock.hpp \
     swap.hpp \
@@ -97,6 +98,7 @@ libInstruments_la_SOURCES = \
     quantobarrieroption.cpp \
     quantoforwardvanillaoption.cpp \
     quantovanillaoption.cpp \
+    singleleg.cpp \
     stickyratchet.cpp \
     stock.cpp \
     swap.cpp \
