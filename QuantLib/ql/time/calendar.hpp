@@ -126,7 +126,8 @@ namespace QuantLib {
                      Integer n,
                      TimeUnit unit,
                      BusinessDayConvention convention = Following,
-                     bool endOfMonth = false) const;
+                     bool endOfMonth = false,
+		     Day annDay = 0) const;
         /*! Advances the given date as specified by the given period and
             returns the result.
             \note The input date is not modified.
@@ -134,7 +135,8 @@ namespace QuantLib {
         Date advance(const Date& date,
                      const Period& period,
                      BusinessDayConvention convention = Following,
-                     bool endOfMonth = false) const;
+                     bool endOfMonth = false,
+		     Day annDay = 0) const;
         /*! Calculates the number of business days between two given
             dates and returns the result.
         */

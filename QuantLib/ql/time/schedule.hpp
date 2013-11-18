@@ -51,7 +51,8 @@ namespace QuantLib {
                  DateGeneration::Rule rule,
                  bool endOfMonth,
                  const Date& firstDate = Date(),
-                 const Date& nextToLastDate = Date());
+                 const Date& nextToLastDate = Date(),
+		 Day annDay = 0);
         Schedule() {}
         //! \name Date access
         //@{

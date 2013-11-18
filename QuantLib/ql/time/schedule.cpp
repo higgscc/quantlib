@@ -80,7 +80,8 @@ namespace QuantLib {
                        DateGeneration::Rule rule,
                        bool endOfMonth,
                        const Date& first,
-                       const Date& nextToLast)
+                       const Date& nextToLast,
+		       Day annDay)
     : fullInterface_(true),
       tenor_(tenor), calendar_(cal),
       convention_(convention),
@@ -199,7 +200,7 @@ namespace QuantLib {
             if (nextToLastDate_ != Date()) {
                 dates_.insert(dates_.begin(), nextToLastDate_);
                 Date temp = nullCalendar.advance(seed,
-                    -periods*tenor_, convention, endOfMonth);
+                    -periods*tenor_, convention, endOfMonth, annDay);
                 if (temp!=nextToLastDate_)
                     isRegular_.insert(isRegular_.begin(), false);
                 else
@@ -213,7 +214,7 @@ namespace QuantLib {
 
             for (;;) {
                 Date temp = nullCalendar.advance(seed,
-                    -periods*tenor_, convention, endOfMonth);
+                    -periods*tenor_, convention, endOfMonth, annDay);
                 if (temp < exitDate) {
                     if (firstDate_ != Date() &&
                         (calendar_.adjust(dates_.front(),convention)!=
@@ -264,7 +265,7 @@ namespace QuantLib {
             if (firstDate_!=Date()) {
                 dates_.push_back(firstDate_);
                 Date temp = nullCalendar.advance(seed, periods*tenor_,
-                                                 convention, endOfMonth);
+                                                 convention, endOfMonth, annDay);
                 if (temp!=firstDate_)
                     isRegular_.push_back(false);
                 else
@@ -296,7 +297,7 @@ namespace QuantLib {
 
             for (;;) {
                 Date temp = nullCalendar.advance(seed, periods*tenor_,
-                                                 convention, endOfMonth);
+                                                 convention, endOfMonth, annDay);
                 if (temp > exitDate) {
                     if (nextToLastDate_ != Date() &&
                         (calendar_.adjust(dates_.back(),convention)!=
