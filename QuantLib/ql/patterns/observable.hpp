@@ -26,16 +26,39 @@
 #ifndef quantlib_observable_hpp
 #define quantlib_observable_hpp
 
+#include <ql/patterns/singleton.hpp>
 #include <ql/errors.hpp>
 #include <ql/types.hpp>
+#include <ql/utilities/tracing.hpp>
 
 #include <boost/shared_ptr.hpp>
-
-#include <set>
+#include <boost/unordered_set.hpp>
 
 namespace QuantLib {
 
     class Observer;
+    class Observable;
+
+    //! global repository for run-time library settings
+    class ObservableSettings : public Singleton<ObservableSettings> {
+        friend class Singleton<ObservableSettings>;
+        friend class Observable;
+      public:
+        void disableUpdates(bool deferred=false) {updatesEnabled_=false; updatesDeferred_=deferred;}
+        void enableUpdates();
+
+        bool updatesEnabled()  {return updatesEnabled_;}
+        bool updatesDeferred() {return updatesDeferred_;}
+      private:
+        ObservableSettings() : updatesEnabled_(true), updatesDeferred_(false) {}
+        void registerDeferredObservers(boost::unordered_set<Observer*>& observers);
+        void unregisterDeferredObserver(Observer*);
+
+        typedef boost::unordered_set<Observer*>::iterator iterator;
+        boost::unordered_set<Observer*> deferredObservers_;
+        bool updatesEnabled_;
+        bool updatesDeferred_;
+    };
 
     //! Object that notifies its changes to a set of observers
     /*! \ingroup patterns */
@@ -52,10 +75,10 @@ namespace QuantLib {
         */
         void notifyObservers();
       private:
-        typedef std::set<Observer*>::iterator iterator;
+        typedef boost::unordered_set<Observer*>::iterator iterator;
         std::pair<iterator, bool> registerObserver(Observer*);
         Size unregisterObserver(Observer*);
-        std::set<Observer*> observers_;
+        boost::unordered_set<Observer*> observers_;
     };
 
     //! Object that gets notified when a given observable changes
@@ -68,7 +91,7 @@ namespace QuantLib {
         Observer& operator=(const Observer&);
         virtual ~Observer();
         // observer interface
-        std::pair<std::set<boost::shared_ptr<Observable> >::iterator, bool>
+        std::pair<boost::unordered_set<boost::shared_ptr<Observable> >::iterator, bool>
                             registerWith(const boost::shared_ptr<Observable>&);
         Size unregisterWith(const boost::shared_ptr<Observable>&);
         /*! This method must be implemented in derived classes. An
@@ -79,12 +102,51 @@ namespace QuantLib {
         void unregisterWithAll();
         virtual void update() = 0;
       private:
-        std::set<boost::shared_ptr<Observable> > observables_;
-        typedef std::set<boost::shared_ptr<Observable> >::iterator iterator;
+        boost::unordered_set<boost::shared_ptr<Observable> > observables_;
+        typedef boost::unordered_set<boost::shared_ptr<Observable> >::iterator iterator;
     };
 
 
     // inline definitions
+
+    inline void ObservableSettings::registerDeferredObservers(boost::unordered_set<Observer*>& observers) {
+        if (updatesDeferred())
+	{
+		QL_TRACE("adding " << observers.size() << " observers to the deferred list");
+        	deferredObservers_.insert(observers.begin(), observers.end());
+	}
+    }
+
+    inline void ObservableSettings::unregisterDeferredObserver(Observer* o) {
+	QL_TRACE("removing observer " << o << " from the deferred list");
+    	deferredObservers_.erase(o);
+    }
+
+    inline void ObservableSettings::enableUpdates() {
+    	updatesEnabled_  = true;
+    	updatesDeferred_ = false;
+
+    	// if there are outstanding deferred updates, do the notification
+        bool successful = true;
+        std::string errMsg;
+
+	QL_TRACE("deferred notification of " << deferredObservers_.size() << " observers");
+        for (iterator i=deferredObservers_.begin(); i!=deferredObservers_.end(); ++i) {
+            try {
+                (*i)->update();
+            } catch (std::exception& e) {
+                successful = false;
+                errMsg = e.what();
+            } catch (...) {
+                successful = false;
+            }
+        }
+
+        deferredObservers_.clear();
+
+        QL_ENSURE(successful,
+                  "could not notify one or more observers: " << errMsg);
+    }
 
     inline Observable::Observable(const Observable&) {
         // the observer set is not copied; no observer asked to
@@ -107,21 +169,37 @@ namespace QuantLib {
         return *this;
     }
 
-    inline std::pair<std::set<Observer*>::iterator, bool>
+    inline std::pair<boost::unordered_set<Observer*>::iterator, bool>
     Observable::registerObserver(Observer* o) {
         return observers_.insert(o);
     }
 
     inline Size Observable::unregisterObserver(Observer* o) {
-        return observers_.erase(o);
+    	// in case the observer is in the deferred notifications list
+    	// remove it
+    	ObservableSettings::instance().unregisterDeferredObserver(o);
+
+    	return observers_.erase(o);
     }
 
     inline void Observable::notifyObservers() {
+    	// check whether the notifications should be triggered
+    	if (!ObservableSettings::instance().updatesEnabled())
+    	{
+    		// if updates are only deferred, flag this for later notification
+    		// these are held centrally by the settings singleton
+    		ObservableSettings::instance().registerDeferredObservers(observers_);
+
+    		return;
+    	}
+
         bool successful = true;
         std::string errMsg;
+
+	QL_TRACE("direct notification of " << observers_.size() << " observers");
         for (iterator i=observers_.begin(); i!=observers_.end(); ++i) {
             try {
-                (*i)->update();
+               (*i)->update();
             } catch (std::exception& e) {
                 // quite a dilemma. If we don't catch the exception,
                 // other observers will not receive the notification
@@ -162,7 +240,7 @@ namespace QuantLib {
             (*i)->unregisterObserver(this);
     }
 
-    inline std::pair<std::set<boost::shared_ptr<Observable> >::iterator, bool>
+    inline std::pair<boost::unordered_set<boost::shared_ptr<Observable> >::iterator, bool>
     Observer::registerWith(const boost::shared_ptr<Observable>& h) {
         if (h) {
             h->registerObserver(this);
