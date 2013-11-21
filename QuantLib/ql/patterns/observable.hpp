@@ -66,7 +66,7 @@ namespace QuantLib {
         friend class Observer;
       public:
         // constructors, assignment, destructor
-        Observable() {}
+        Observable() : settings_(ObservableSettings::instance()) {}
         Observable(const Observable&);
         Observable& operator=(const Observable&);
         virtual ~Observable() {}
@@ -79,6 +79,7 @@ namespace QuantLib {
         std::pair<iterator, bool> registerObserver(Observer*);
         Size unregisterObserver(Observer*);
         boost::unordered_set<Observer*> observers_;
+	ObservableSettings& settings_;
     };
 
     //! Object that gets notified when a given observable changes
@@ -127,28 +128,31 @@ namespace QuantLib {
     	updatesDeferred_ = false;
 
     	// if there are outstanding deferred updates, do the notification
-        bool successful = true;
-        std::string errMsg;
+        if (deferredObservers_.size() > 0)
+        {
+            bool successful = true;
+            std::string errMsg;
 
-	QL_TRACE("deferred notification of " << deferredObservers_.size() << " observers");
-        for (iterator i=deferredObservers_.begin(); i!=deferredObservers_.end(); ++i) {
-            try {
-                (*i)->update();
-            } catch (std::exception& e) {
-                successful = false;
-                errMsg = e.what();
-            } catch (...) {
-                successful = false;
+            QL_TRACE("deferred notification of " << deferredObservers_.size() << " observers");
+            for (iterator i=deferredObservers_.begin(); i!=deferredObservers_.end(); ++i) {
+                try {
+                    (*i)->update();
+                } catch (std::exception& e) {
+                    successful = false;
+                    errMsg = e.what();
+                } catch (...) {
+                    successful = false;
+                }
             }
-        }
 
-        deferredObservers_.clear();
+            deferredObservers_.clear();
 
-        QL_ENSURE(successful,
+            QL_ENSURE(successful,
                   "could not notify one or more observers: " << errMsg);
+        }
     }
 
-    inline Observable::Observable(const Observable&) {
+    inline Observable::Observable(const Observable&) : settings_(ObservableSettings::instance()) {
         // the observer set is not copied; no observer asked to
         // register with this object
     }
@@ -177,45 +181,50 @@ namespace QuantLib {
     inline Size Observable::unregisterObserver(Observer* o) {
     	// in case the observer is in the deferred notifications list
     	// remove it
-    	ObservableSettings::instance().unregisterDeferredObserver(o);
+        if (settings_.updatesDeferred())
+    	    settings_.unregisterDeferredObserver(o);
 
     	return observers_.erase(o);
     }
 
     inline void Observable::notifyObservers() {
     	// check whether the notifications should be triggered
-    	if (!ObservableSettings::instance().updatesEnabled())
+    	if (!settings_.updatesEnabled())
     	{
-    		// if updates are only deferred, flag this for later notification
-    		// these are held centrally by the settings singleton
-    		ObservableSettings::instance().registerDeferredObservers(observers_);
+    	    // if updates are only deferred, flag this for later notification
+    	    // these are held centrally by the settings singleton
+            if (settings_.updatesDeferred())
+    		settings_.registerDeferredObservers(observers_);
 
-    		return;
+    	    return;
     	}
 
-        bool successful = true;
-        std::string errMsg;
+        if (observers_.size() > 0)
+        {
+            bool successful = true;
+            std::string errMsg;
 
-	QL_TRACE("direct notification of " << observers_.size() << " observers");
-        for (iterator i=observers_.begin(); i!=observers_.end(); ++i) {
-            try {
-               (*i)->update();
-            } catch (std::exception& e) {
-                // quite a dilemma. If we don't catch the exception,
-                // other observers will not receive the notification
-                // and might be left in an incorrect state. If we do
-                // catch it and continue the loop (as we do here) we
-                // lose the exception. The least evil might be to try
-                // and notify all observers, while raising an
-                // exception if something bad happened.
-                successful = false;
-                errMsg = e.what();
-            } catch (...) {
-                successful = false;
+            QL_TRACE("direct notification of " << observers_.size() << " observers");
+            for (iterator i=observers_.begin(); i!=observers_.end(); ++i) {
+                try {
+                   (*i)->update();
+                } catch (std::exception& e) {
+                    // quite a dilemma. If we don't catch the exception,
+                    // other observers will not receive the notification
+                    // and might be left in an incorrect state. If we do
+                    // catch it and continue the loop (as we do here) we
+                    // lose the exception. The least evil might be to try
+                    // and notify all observers, while raising an
+                    // exception if something bad happened.
+                    successful = false;
+                    errMsg = e.what();
+                } catch (...) {
+                    successful = false;
+                }
             }
-        }
-        QL_ENSURE(successful,
+            QL_ENSURE(successful,
                   "could not notify one or more observers: " << errMsg);
+        }
     }
 
 
